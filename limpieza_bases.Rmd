@@ -1,0 +1,40 @@
+---
+title: "Untitled"
+author: "Ignacio Luis Bastías"
+date: "2024-10-15"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+
+knitr::opts_chunk$set(echo = TRUE)
+
+```
+
+```{r atajos_r}
+
+# Atajos de teclado en R:
+  # Ctrl + Alt + I              = agrega un chunk
+  # Ctrl + Shift + M            = " |> " 
+  # Alt + -                     = " <- "
+  # Ctrl + I                    = ajusta la tabulación
+  # Ctrl + Shift + /            = ajusta los comentarios a varias líneas
+  # Shift + Alt + flecha abajo  = duplica la linea
+
+```
+
+
+```{r librerias}
+
+# Paquetes que van a usarse a lo largo de todo el código
+if (!require('tidyverse')) install.packages('tidyverse'); library('tidyverse')
+
+```
+
+
+```{r}
+
+
+
+```
+
