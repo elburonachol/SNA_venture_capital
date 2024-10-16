@@ -1,3 +1,11 @@
+# Se agrega "bases/" para que no se suba esa carpeta a GitHub
+bases/
+
+
+
+
+
+
 # History files
 .Rhistory
 .Rapp.history
