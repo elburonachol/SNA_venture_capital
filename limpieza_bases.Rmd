@@ -46,7 +46,8 @@ inversiones_a_argentina <- read_excel(path = "bases/inversiones_a_argentina_corr
 inversiones_a_argentina |> 
   select("Organization Name", "Investor Names") |> 
   separate_wider_delim(cols = "Investor Names",
-                       delim = ",") |> 
+                       delim = ",",
+                       names = as.character(1:8)) |> 
   View()
   pivot_wider(names_from = "Investor Names",
               values_from = "Organization Name") |> 
