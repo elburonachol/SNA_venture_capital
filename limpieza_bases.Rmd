@@ -26,33 +26,140 @@ knitr::opts_chunk$set(echo = TRUE)
 
 ```{r librerias}
 
-# Paquetes que van a usarse a lo largo de todo el código
+# Paquetes que van a usarse a lo largo de todo el código, habituales
 if (!require('tidyverse')) install.packages('tidyverse'); library('tidyverse')
 if (!require('readxl')) install.packages('readxl'); library('readxl')
+
+# Paquetes específicos de este análisis
+if (!require('sna')) install.packages('sna'); library('sna')
 
 ```
 
 
 ```{r carga_de_bases}
 
+# Cargo las bases de inversiones realizadas a start-ups con headquarters ubicados en Argentina
 
 inversiones_a_argentina <- read_excel(path = "bases/inversiones_a_argentina_corregido.xlsx",
                                       sheet = "final")
 
+# En los nombres de las columnas, reemplazo los espacios con "_" y todos los nombres pasan a minúscula
+
+inversiones_a_argentina <- inversiones_a_argentina |> 
+  rename_with(~ gsub(" ", "_", .x)) |> 
+  rename_with(tolower)
+
 ```
+
+
+```{r inversiones_publicas}
+
+# Armo el listado separado de inversiones de estado privadas, donde no se identifica quién puso la plata
+
+INVERSIONES_PRIVADAS <- inversiones_a_argentina |> 
+  filter(is.na(lead_investors) & is.na(investor_names))
+
+
+# Me quedo con las inversiones que incluyen el nombre de algún inversor
+
+inversiones_a_argentina <- inversiones_a_argentina |> 
+  filter(!is.na(lead_investors) | !is.na(investor_names))
+
+```
+
+
+```{r listado_de_2_variables}
+
+# Separo los inversores en columnas
+
+inversiones_a_argentina <-  inversiones_a_argentina |> 
+  select(organization_name, lead_investors, investor_names) |> 
+  separate_wider_delim(cols = c(lead_investors, investor_names),
+                       delim = ", ",
+                       names_sep = "_",
+                       too_few = "align_start")
+
+# Pivoteo a lo largo y filtro los NA
+
+inversiones_a_argentina <- inversiones_a_argentina |> 
+  pivot_longer(cols = starts_with("lead_investors") |
+                      starts_with("investor_names"),
+               names_to = "new_tipo_de_inversor",
+               values_to = "investor") |> 
+  filter(!is.na(investor))
+
+# Elimino los duplicados
+
+inversiones_a_argentina <- inversiones_a_argentina |> 
+  distinct(organization_name, investor)
+
+```
+
+
+```{r matriz_de_inversores}
+
+# Armo la matriz de inversores
+
+## Armo una matriz de inversores, sin start ups
+matriz_a_medias <- inversiones_a_argentina |> 
+  # Ordeno la tibble por inversor
+  arrange(investor) |> 
+  mutate(value = 1) |>
+  # Pivoteo para que queden de columnas los nombres de los VC; y completo los espacios vacíos con 0
+  pivot_wider(names_from = investor,
+              values_from = value,
+              values_fill = list(value = 0)) |>
+  # Elimino los nombres de las start-ups, porque ya no es relevante
+  select(-organization_name) |>
+  as.matrix()
+
+## Pongo los inversores en la columna de nombres
+matriz_inversores <- t(matriz_a_medias) %*% matriz_a_medias
+
+## Los números mayores a 1 se transforman en 1
+matriz_inversores <- ifelse(matriz_inversores > 0, 1, 0)
+
+# Elimino la matriz a medias, que ya no sirve
+rm(matriz_a_medias)
+
+```
+
+
 
 ```{r}
 
-inversiones_a_argentina |> 
-  select("Organization Name", "Investor Names") |> 
-  separate_wider_delim(cols = "Investor Names",
-                       delim = ",",
-                       names = as.character(1:8)) |> 
-  View()
-  pivot_wider(names_from = "Investor Names",
-              values_from = "Organization Name") |> 
-  View()
+# Creamos el objeto network
+matriz_inversores <- network(matriz_inversores)
+
+summary(matriz_inversores)
 
 ```
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+-----------------------
+
+```{r CHUNK_DE_PRUEBA, eval=FALSE, include=FALSE}
+
+inversiones_a_argentina |> 
+  count(investor) |> 
+  View()
+
+inversiones_a_argentina |> 
+  filter(is.na(lead_investors) & is.na(investor_names)) |> 
+  View()
+
+```
 
