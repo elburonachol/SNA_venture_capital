@@ -5,6 +5,8 @@ date: "2024-10-15"
 output: pdf_document
 ---
 
+# Introducción al código
+
 ```{r setup, include=FALSE}
 
 knitr::opts_chunk$set(echo = TRUE)
@@ -35,6 +37,7 @@ if (!require('sna')) install.packages('sna'); library('sna')
 
 ```
 
+# Bases y limpieza
 
 ```{r carga_de_bases}
 
@@ -98,7 +101,7 @@ inversiones_a_argentina <- inversiones_a_argentina |>
 
 ```{r matriz_de_inversores}
 
-# Armo la matriz de inversores
+# Armo la matriz de inversores, con cantidad en común
 
 ## Armo una matriz de inversores, sin start ups
 matriz_a_medias <- inversiones_a_argentina |> 
@@ -113,29 +116,74 @@ matriz_a_medias <- inversiones_a_argentina |>
   select(-organization_name) |>
   as.matrix()
 
-## Pongo los inversores en la columna de nombres
+## Pongo los inversores en la columna de nombres; para eso, multiplico por la matriz transpuesta
 matriz_inversores <- t(matriz_a_medias) %*% matriz_a_medias
-
-## Los números mayores a 1 se transforman en 1
-matriz_inversores <- ifelse(matriz_inversores > 0, 1, 0)
-
-# Elimino la matriz a medias, que ya no sirve
-rm(matriz_a_medias)
 
 ```
 
 
+```{r edgelist_de_inversores}
+
+# Armo el edgelist de inversores, que incluye cuántas start-ups tienen en común estos inversores
+
+## Recupero los nombres de los fondos como columna
+edgelist_inversores <- matriz_inversores |> 
+  as.data.frame() |> 
+  rownames_to_column() |> 
+  # Modifica el nombre de la columna y elimina el anterior nombre
+  mutate("new_inversor_1" = rowname,
+         .before = rowname,
+         .keep = "unused")
+
+## Pivoteo los nombres de los fondos
+edgelist_inversores <- edgelist_inversores |> 
+  as.tibble() |> 
+  pivot_longer(cols = !new_inversor_1,
+               names_to = "new_inversor_2",
+               values_to = "new_SU_en_comun") |> 
+  filter(new_SU_en_comun != 0) |> 
+  filter(new_inversor_1 != new_inversor_2)
+
+```
+
+```{r adjacency_inversores}
+
+# Armo la matriz de inversores, en estructura adjacency
+
+## Los números mayores a 1 se transforman en 1
+adjacency_inversores <- ifelse(matriz_inversores > 0, 1, 0)
+
+# Elimino las matrices, que son grandes y ocupan bastante espacio
+rm(matriz_a_medias, matriz_inversores)
+
+```
+
+
+# Armado de la red
+
+```{r red_desde_adjecency}
+
+# Creamos el objeto network, a partir de la 
+adjacency_inversores <- network(adjacency_inversores)
+
+summary(adjacency_inversores)
+
+```
+
+```{r red_desde_edgelist}
+
+edgelist_inversores <- network(edgelist_inversores,
+                               matrix.type = "edgelist")
+
+summary(edgelist_inversores)
+
+```
 
 ```{r}
 
-# Creamos el objeto network
-matriz_inversores <- network(matriz_inversores)
-
-summary(matriz_inversores)
+gplot(edgelist_inversores)
 
 ```
-
-
 
 
 
