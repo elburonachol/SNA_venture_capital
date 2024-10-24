@@ -46,26 +46,47 @@ if (!require('sna')) install.packages('sna'); library('sna')
 inversiones_a_argentina <- read_excel(path = "bases/inversiones_a_argentina_corregido.xlsx",
                                       sheet = "final")
 
+inversiones_de_argentina <- read_excel(path = "bases/inversiones_de_argentina_corregido.xlsx",
+                                      sheet = "final")
+
 # En los nombres de las columnas, reemplazo los espacios con "_" y todos los nombres pasan a minúscula
 
 inversiones_a_argentina <- inversiones_a_argentina |> 
   rename_with(~ gsub(" ", "_", .x)) |> 
   rename_with(tolower)
 
+inversiones_de_argentina <- inversiones_de_argentina |> 
+  rename_with(~ gsub(" ", "_", .x)) |> 
+  rename_with(tolower)
+
 ```
+
+```{r bind_rows}
+
+# Pego las tablas una después de la otra
+inversiones_argentina <- inversiones_a_argentina |> 
+  bind_rows(inversiones_de_argentina)
+
+# Elimino las inversiones que están duplicadas
+inversiones_argentina <- inversiones_argentina |> 
+  unique() 
+
+# Elimino los objetos que ya no uso
+rm(inversiones_a_argentina, inversiones_de_argentina)
+
+```
+
 
 
 ```{r inversiones_publicas}
 
-# Armo el listado separado de inversiones de estado privadas, donde no se identifica quién puso la plata
-
-INVERSIONES_PRIVADAS <- inversiones_a_argentina |> 
+# Armo el listado separado de inversiones secretas, donde no se identifica quién puso la plata
+INVERSIONES_SECRETAS <- inversiones_argentina |> 
   filter(is.na(lead_investors) & is.na(investor_names))
 
 
 # Me quedo con las inversiones que incluyen el nombre de algún inversor
-
-inversiones_a_argentina <- inversiones_a_argentina |> 
+inversiones_argentina <- inversiones_argentina |> 
   filter(!is.na(lead_investors) | !is.na(investor_names))
 
 ```
@@ -74,8 +95,7 @@ inversiones_a_argentina <- inversiones_a_argentina |>
 ```{r listado_de_2_variables}
 
 # Separo los inversores en columnas
-
-inversiones_a_argentina <-  inversiones_a_argentina |> 
+inversiones_argentina <-  inversiones_argentina |> 
   select(organization_name, lead_investors, investor_names) |> 
   separate_wider_delim(cols = c(lead_investors, investor_names),
                        delim = ", ",
@@ -83,8 +103,7 @@ inversiones_a_argentina <-  inversiones_a_argentina |>
                        too_few = "align_start")
 
 # Pivoteo a lo largo y filtro los NA
-
-inversiones_a_argentina <- inversiones_a_argentina |> 
+inversiones_argentina <- inversiones_argentina |> 
   pivot_longer(cols = starts_with("lead_investors") |
                       starts_with("investor_names"),
                names_to = "new_tipo_de_inversor",
@@ -92,8 +111,7 @@ inversiones_a_argentina <- inversiones_a_argentina |>
   filter(!is.na(investor))
 
 # Elimino los duplicados
-
-inversiones_a_argentina <- inversiones_a_argentina |> 
+inversiones_argentina <- inversiones_argentina |> 
   distinct(organization_name, investor)
 
 ```
@@ -101,10 +119,10 @@ inversiones_a_argentina <- inversiones_a_argentina |>
 
 ```{r matriz_de_inversores}
 
-# Armo la matriz de inversores, con cantidad en común
+# Armo la matriz de inversores, con cantidad de empresas invertidas en común
 
 ## Armo una matriz de inversores, sin start ups
-matriz_a_medias <- inversiones_a_argentina |> 
+matriz_a_medias <- inversiones_argentina |> 
   # Ordeno la tibble por inversor
   arrange(investor) |> 
   mutate(value = 1) |>
@@ -118,6 +136,9 @@ matriz_a_medias <- inversiones_a_argentina |>
 
 ## Pongo los inversores en la columna de nombres; para eso, multiplico por la matriz transpuesta
 matriz_inversores <- t(matriz_a_medias) %*% matriz_a_medias
+
+# Elimino el objeto que ya no necesito
+rm(matriz_a_medias)
 
 ```
 
@@ -137,7 +158,7 @@ edgelist_inversores <- matriz_inversores |>
 
 ## Pivoteo los nombres de los fondos
 edgelist_inversores <- edgelist_inversores |> 
-  as.tibble() |> 
+  as_tibble() |> 
   pivot_longer(cols = !new_inversor_1,
                names_to = "new_inversor_2",
                values_to = "new_SU_en_comun") |> 
@@ -145,6 +166,7 @@ edgelist_inversores <- edgelist_inversores |>
   filter(new_inversor_1 != new_inversor_2)
 
 ```
+
 
 ```{r adjacency_inversores}
 
@@ -154,36 +176,68 @@ edgelist_inversores <- edgelist_inversores |>
 adjacency_inversores <- ifelse(matriz_inversores > 0, 1, 0)
 
 # Elimino las matrices, que son grandes y ocupan bastante espacio
-rm(matriz_a_medias, matriz_inversores)
+rm(matriz_inversores)
 
 ```
-
 
 # Armado de la red
 
 ```{r red_desde_adjecency}
 
-# Creamos el objeto network, a partir de la 
+# Creamos el objeto network, a partir de la adjecency
 adjacency_inversores <- network(adjacency_inversores)
 
-summary(adjacency_inversores)
+#summary(adjacency_inversores)
 
 ```
 
 ```{r red_desde_edgelist}
 
-edgelist_inversores <- network(edgelist_inversores,
-                               matrix.type = "edgelist")
+edgelist_inversores_corto <- edgelist_inversores |> 
+  arrange(desc(new_SU_en_comun)) |> 
+  filter(new_SU_en_comun > 3)
 
-summary(edgelist_inversores)
+# Creamos el objeto network, a partir de la edgelist
+edgelist_inversores_corto <- network(edgelist_inversores_corto,
+                                     matrix.type = "edgelist")
+
+#summary(edgelist_inversores_corto)
 
 ```
 
-```{r}
+```{r red_graficada}
 
-gplot(edgelist_inversores)
+# ¿Saldrá una red de esto?
+plot(edgelist_inversores_corto,
+     # Muestra etiquetas
+     displaylabels = F,
+     # No muestra flechas
+     usearrows = F,
+     # Impide que se superpongan los nombres
+     jitter = T,
+     # Dice que es interactivo pero no estaría cambiando nada
+     #interactive = F,
+     # Impide cajas en las etiquetas
+     boxed.labels = F,
+     # Agranda el tamaño de los círculos
+     vertex.cex = 0.8,
+     edge.lwd = (as.numeric(edgelist_inversores_corto%e%"new_SU_en_comun"))^1.4)
+
+#methods(plot) ---- plot.network.default()
 
 ```
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -201,11 +255,11 @@ gplot(edgelist_inversores)
 
 ```{r CHUNK_DE_PRUEBA, eval=FALSE, include=FALSE}
 
-inversiones_a_argentina |> 
+inversiones_argentina |> 
   count(investor) |> 
   View()
 
-inversiones_a_argentina |> 
+inversiones_argentina |> 
   filter(is.na(lead_investors) & is.na(investor_names)) |> 
   View()
 
