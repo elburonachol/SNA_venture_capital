@@ -37,11 +37,15 @@ if (!require('sna')) install.packages('sna'); library('sna')
 
 ```
 
-# Bases y limpieza
+# Carga y limpieza de bases
 
-```{r carga_de_bases}
+## Bases inversiones
 
-# Cargo las bases de inversiones realizadas a start-ups con headquarters ubicados en Argentina
+Cargamos y limpiamos las bases de inversiones de y a argentina
+
+```{r carga_de_bases_inversiones}
+
+# Cargo las bases de inversiones realizadas a empresas con headquarters ubicados en Argentina
 
 inversiones_a_argentina <- read_excel(path = "bases/inversiones_a_argentina_corregido.xlsx",
                                       sheet = "final")
@@ -61,7 +65,8 @@ inversiones_de_argentina <- inversiones_de_argentina |>
 
 ```
 
-```{r bind_rows}
+
+```{r bind_rows_inversiones}
 
 # Pego las tablas una después de la otra
 inversiones_argentina <- inversiones_a_argentina |> 
@@ -76,7 +81,7 @@ rm(inversiones_a_argentina, inversiones_de_argentina)
 
 ```
 
-
+Excluyo las inversiones donde no se identifica el inversor, aunque se sepan el resto de los datos (monto total, fecha, etc.)
 
 ```{r inversiones_publicas}
 
@@ -92,11 +97,74 @@ inversiones_argentina <- inversiones_argentina |>
 ```
 
 
+## Bases inversores
+
+```{r carga_de_bases_inversiones}
+
+# Cargo las bases de inversores que invirtieron en empresas en Argentina
+
+inversores_a_argentina <- read_excel(path = "bases/VC_y_otros_a_argentina_corregido.xlsx",
+                                     sheet = "final")
+
+# En los nombres de las columnas, reemplazo los espacios con "_" y todos los nombres pasan a minúscula
+
+inversores_a_argentina <- inversores_a_argentina |> 
+  rename_with(~ gsub(" ", "_", .x)) |> 
+  rename_with(tolower)
+
+```
+
+
+```{r personas_inversoras}
+
+# Arma el listado de personas_inversoras_b: no estoy seguro si son todas personas, porque tienen nombre pero no género
+PERSONAS_INVERSORAS_B <- inversores_a_argentina |> 
+  filter(!is.na(first_name) & is.na(gender)) |> 
+  select(`organization/person_name`, `organization/person_name_url`, number_of_investments,
+         primary_organization_url, first_name, last_name, description, investor_type, )
+
+# Arma el listado de personas_inversoras seguras (tienen nombre y género)
+personas_inversoras <- inversores_a_argentina |> 
+  filter(!is.na(first_name) & !is.na(gender)) |> 
+  pull(`organization/person_name`)
+
+```
+
+
+```{r suma_personas_inversoras}
+
+# Abre automáticamente la pantalla de PERSONAS_INVERSORAS_B para que vea qué hay ahí
+PERSONAS_INVERSORAS_B |> 
+  View()
+
+# Selecciona quienes estoy seguro que son personas
+personas_inversoras_b <- PERSONAS_INVERSORAS_B |> 
+  filter(`organization/person_name` %in% c("Jackie Reses", "Daniel Yanes", "Gustavo Alegre",
+                                           "Emilio Gutierrez", "Lucas Kozinski",
+                                           "Christophe Groh", "John Zimmerebner",
+                                           "Peter Fittin", "Rushi Manche", "Sami BENYAKOUB",
+                                           "Weikeng Chen", "Sam Nodeguardians",
+                                           "Francisco J Mendez", "Paulo Dominguez",
+                                           "Lucas Dubois", "Benny Saada", "NicolÃ¡s Mindlin"
+                                           )) |> 
+  pull(`organization/person_name`)
+
+# Uno ambas listas
+personas_inversoras <- personas_inversoras |> 
+  c(personas_inversoras_b)
+
+```
+
+
+
+# Formateo de bases
+
 ```{r listado_de_2_variables}
 
 # Separo los inversores en columnas
-inversiones_argentina <-  inversiones_argentina |> 
-  select(organization_name, lead_investors, investor_names) |> 
+inversiones_argentina <- inversiones_argentina |> 
+  select(organization_name, investor_names) |>
+  View()
   separate_wider_delim(cols = c(lead_investors, investor_names),
                        delim = ", ",
                        names_sep = "_",
@@ -113,6 +181,13 @@ inversiones_argentina <- inversiones_argentina |>
 # Elimino los duplicados
 inversiones_argentina <- inversiones_argentina |> 
   distinct(organization_name, investor)
+
+# Excluímos a las personas inversoras del listado
+inversiones_argentina <- inversiones_argentina |> 
+  filter(!investor %in% personas_inversoras)
+
+# Elimino los objetos que ya no necesito
+rm(personas_inversoras, personas_inversoras_b)
 
 ```
 
@@ -189,20 +264,22 @@ adjacency_inversores <- network(adjacency_inversores)
 
 #summary(adjacency_inversores)
 
+# Por ahora, agrego un remove para este objeto porque no se usa
+rm(adjacency_inversores)
+
 ```
 
 ```{r red_desde_edgelist}
 
 edgelist_inversores_corto <- edgelist_inversores |> 
   arrange(desc(new_SU_en_comun)) |> 
-  filter(new_SU_en_comun > 3)
+  filter(new_SU_en_comun > 1)
 
 # Creamos el objeto network, a partir de la edgelist
 edgelist_inversores_corto <- network(edgelist_inversores_corto,
                                      matrix.type = "edgelist")
 
 #summary(edgelist_inversores_corto)
-
 ```
 
 ```{r red_graficada}
@@ -214,15 +291,16 @@ plot(edgelist_inversores_corto,
      # No muestra flechas
      usearrows = F,
      # Impide que se superpongan los nombres
-     jitter = T,
+     jitter = F,
      # Dice que es interactivo pero no estaría cambiando nada
      #interactive = F,
      # Impide cajas en las etiquetas
      boxed.labels = F,
      # Agranda el tamaño de los círculos
      vertex.cex = 0.8,
-     edge.lwd = (as.numeric(edgelist_inversores_corto%e%"new_SU_en_comun"))^1.4)
+     edge.lwd = ((as.numeric(edgelist_inversores_corto%e%"new_SU_en_comun"))^1.8)/2)
 
+# Esto es lo que busqué para encontrar cómo se definen los parámetros de la función esta
 #methods(plot) ---- plot.network.default()
 
 ```
