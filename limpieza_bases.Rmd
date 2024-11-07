@@ -51,7 +51,7 @@ inversiones_a_argentina <- read_excel(path = "bases/inversiones_a_argentina_corr
                                       sheet = "final")
 
 inversiones_de_argentina <- read_excel(path = "bases/inversiones_de_argentina_corregido.xlsx",
-                                      sheet = "final")
+                                       sheet = "final")
 
 # En los nombres de las columnas, reemplazo los espacios con "_" y todos los nombres pasan a minúscula
 
@@ -273,7 +273,7 @@ rm(adjacency_inversores)
 
 edgelist_inversores_corto <- edgelist_inversores |> 
   arrange(desc(new_SU_en_comun)) |> 
-  filter(new_SU_en_comun > 1)
+  filter(new_SU_en_comun > 2)
 
 # Creamos el objeto network, a partir de la edgelist
 edgelist_inversores_corto <- network(edgelist_inversores_corto,
