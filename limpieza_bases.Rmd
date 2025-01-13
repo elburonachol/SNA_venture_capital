@@ -114,57 +114,13 @@ inversores_a_argentina <- inversores_a_argentina |>
 
 ```
 
-
-```{r personas_inversoras}
-
-# Arma el listado de personas_inversoras_b: no estoy seguro si son todas personas, porque tienen nombre pero no género
-PERSONAS_INVERSORAS_B <- inversores_a_argentina |> 
-  filter(!is.na(first_name) & is.na(gender)) |> 
-  select(`organization/person_name`, `organization/person_name_url`, number_of_investments,
-         primary_organization_url, first_name, last_name, description, investor_type, )
-
-# Arma el listado de personas_inversoras seguras (tienen nombre y género)
-personas_inversoras <- inversores_a_argentina |> 
-  filter(!is.na(first_name) & !is.na(gender)) |> 
-  pull(`organization/person_name`)
-
-```
-
-
-```{r suma_personas_inversoras}
-
-# Abre automáticamente la pantalla de PERSONAS_INVERSORAS_B para que vea qué hay ahí
-PERSONAS_INVERSORAS_B |> 
-  View()
-
-# Selecciona quienes estoy seguro que son personas
-personas_inversoras_b <- PERSONAS_INVERSORAS_B |> 
-  filter(`organization/person_name` %in% c("Jackie Reses", "Daniel Yanes", "Gustavo Alegre",
-                                           "Emilio Gutierrez", "Lucas Kozinski",
-                                           "Christophe Groh", "John Zimmerebner",
-                                           "Peter Fittin", "Rushi Manche", "Sami BENYAKOUB",
-                                           "Weikeng Chen", "Sam Nodeguardians",
-                                           "Francisco J Mendez", "Paulo Dominguez",
-                                           "Lucas Dubois", "Benny Saada", "NicolÃ¡s Mindlin"
-                                           )) |> 
-  pull(`organization/person_name`)
-
-# Uno ambas listas
-personas_inversoras <- personas_inversoras |> 
-  c(personas_inversoras_b)
-
-```
-
-
-
 # Formateo de bases
 
 ```{r listado_de_2_variables}
 
 # Separo los inversores en columnas
 inversiones_argentina <- inversiones_argentina |> 
-  select(organization_name, investor_names) |>
-  View()
+  select(organization_name, lead_investors, investor_names) |>
   separate_wider_delim(cols = c(lead_investors, investor_names),
                        delim = ", ",
                        names_sep = "_",
@@ -182,14 +138,37 @@ inversiones_argentina <- inversiones_argentina |>
 inversiones_argentina <- inversiones_argentina |> 
   distinct(organization_name, investor)
 
-# Excluímos a las personas inversoras del listado
-inversiones_argentina <- inversiones_argentina |> 
-  filter(!investor %in% personas_inversoras)
+```
 
-# Elimino los objetos que ya no necesito
-rm(personas_inversoras, personas_inversoras_b)
+
+```{r listados}
+
+# Arma el listado de personas_inversoras (no están catalogades como inversores ángel)
+list_personas_inversoras <- inversores_a_argentina |> 
+  filter(investor_type %in% c("Individual/Angel", "Individual/Angel, Investment Partner")) |> 
+  pull(`organization/person_name`)
+
+list_inversores_a_argentina <- inversores_a_argentina |> 
+  pull(`organization/person_name`)
 
 ```
+
+
+```{r filtrados_inversores}
+
+# Excluímos a las personas inversoras del listado
+inversiones_argentina <- inversiones_argentina |> 
+  filter(!investor %in% list_personas_inversoras)
+
+# Incluimos sólo a quienes a los inversores que están incluidos en el listado de inversores a Argentina
+inversiones_argentina <- inversiones_argentina |> 
+  filter(investor %in% list_inversores_a_argentina)
+
+# Elimino los objetos que ya no necesito
+rm(list_personas_inversoras, list_inversores_a_argentina)
+
+```
+
 
 
 ```{r matriz_de_inversores}
@@ -242,8 +221,9 @@ edgelist_inversores <- edgelist_inversores |>
 
 ```
 
+Estos dos chunks por ahora no se usan. Se anulan por ahora
 
-```{r adjacency_inversores}
+```{r adjacency_inversores, eval=FALSE, include=FALSE}
 
 # Armo la matriz de inversores, en estructura adjacency
 
@@ -255,25 +235,23 @@ rm(matriz_inversores)
 
 ```
 
-# Armado de la red
-
-```{r red_desde_adjecency}
+```{r red_desde_adjecency, eval=FALSE, include=FALSE}
 
 # Creamos el objeto network, a partir de la adjecency
 adjacency_inversores <- network(adjacency_inversores)
 
 #summary(adjacency_inversores)
 
-# Por ahora, agrego un remove para este objeto porque no se usa
-rm(adjacency_inversores)
-
 ```
+
+# Armado de la red (desde edgelist)
 
 ```{r red_desde_edgelist}
 
+# Seleccionamos sólo algunos de los vínculos
 edgelist_inversores_corto <- edgelist_inversores |> 
   arrange(desc(new_SU_en_comun)) |> 
-  filter(new_SU_en_comun > 2)
+  filter(new_SU_en_comun >= 3)
 
 # Creamos el objeto network, a partir de la edgelist
 edgelist_inversores_corto <- network(edgelist_inversores_corto,
