@@ -160,7 +160,7 @@ list_inversores_a_argentina <- inversores_a_argentina |>
 inversiones_argentina <- inversiones_argentina |> 
   filter(!investor %in% list_personas_inversoras)
 
-# Incluimos sólo a quienes a los inversores que están incluidos en el listado de inversores a Argentina
+# Incluimos sólo a inversores institucionales que están incluidos en el listado de inversores a Argentina
 inversiones_argentina <- inversiones_argentina |> 
   filter(investor %in% list_inversores_a_argentina)
 
