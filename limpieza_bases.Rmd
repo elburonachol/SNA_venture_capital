@@ -34,6 +34,7 @@ if (!require('readxl')) install.packages('readxl'); library('readxl')
 
 # Paquetes específicos de este análisis
 if (!require('sna')) install.packages('sna'); library('sna')
+#if (!require('network')) install.packages('network'); library('network')
 
 ```
 
@@ -65,6 +66,7 @@ inversiones_de_argentina <- inversiones_de_argentina |>
 
 ```
 
+Unimos ambas bases para tener una única base de inversiones de y hacia Argentina
 
 ```{r bind_rows_inversiones}
 
@@ -81,13 +83,37 @@ rm(inversiones_a_argentina, inversiones_de_argentina)
 
 ```
 
+Dos VC se llaman "Dragon Capital". Especificamos cuál invirtió en cada caso
+
+```{r dragon_capital_inversiones}
+
+inversiones_argentina <- inversiones_argentina |> 
+  mutate(investor_names = case_when(
+    # Si se llama "Dragon Capital" y...
+    str_detect(investor_names, "Dragon Capital") &
+      # tiene este URL de transacción
+      transaction_name_url == "https://www.crunchbase.com/funding_round/wibond-seed--1ca11fd8"
+    # lo renombro así
+    ~ "Alanna Gregory, Bluewatch Ventures, Cathexis Ventures, Dragon Capital-UKR, Eureka Capital Management, Fen Ventures, First Check Ventures, Grand Park Ventures, James Park, Kalei Ventures, Latitud, Marc Randolph, Matias Nisenson, MyAsia VC, Newtopia VC, Randy Reddig, Soma Capital, Trousdale Ventures, Y Combinator",
+    # Si se llama "Dragon Capital" y...
+    str_detect(investor_names, "Dragon Capital") &
+      # tiene este URL de transacción
+      transaction_name_url == "https://www.crunchbase.com/funding_round/digibank-seed--370bc18c"
+    ~ "Dragon Capital-USA",
+    # Al resto, les dejo los nombres que tienen
+    TRUE ~ investor_names))
+
+```
+
+
 Excluyo las inversiones donde no se identifica el inversor, aunque se sepan el resto de los datos (monto total, fecha, etc.)
 
 ```{r inversiones_publicas}
 
 # Armo el listado separado de inversiones secretas, donde no se identifica quién puso la plata
 INVERSIONES_SECRETAS <- inversiones_argentina |> 
-  filter(is.na(lead_investors) & is.na(investor_names))
+  filter(is.na(lead_investors) & is.na(investor_names)) |> 
+  pull(transaction_name_url)
 
 
 # Me quedo con las inversiones que incluyen el nombre de algún inversor
@@ -96,25 +122,7 @@ inversiones_argentina <- inversiones_argentina |>
 
 ```
 
-
-## Bases inversores
-
-```{r carga_de_bases_inversiones}
-
-# Cargo las bases de inversores que invirtieron en empresas en Argentina
-
-inversores_a_argentina <- read_excel(path = "bases/VC_y_otros_a_argentina_corregido.xlsx",
-                                     sheet = "final")
-
-# En los nombres de las columnas, reemplazo los espacios con "_" y todos los nombres pasan a minúscula
-
-inversores_a_argentina <- inversores_a_argentina |> 
-  rename_with(~ gsub(" ", "_", .x)) |> 
-  rename_with(tolower)
-
-```
-
-# Formateo de bases
+Me quedo con un listado de inversiones por 2 variables: quién recibió el dinero ("organization_name") y quién se lo dio ("investor")
 
 ```{r listado_de_2_variables}
 
@@ -140,17 +148,53 @@ inversiones_argentina <- inversiones_argentina |>
 
 ```
 
+## Bases inversores
 
-```{r listados}
+```{r carga_de_bases_inversiones}
 
-# Arma el listado de personas_inversoras (no están catalogades como inversores ángel)
-list_personas_inversoras <- inversores_a_argentina |> 
+# Cargo las bases de inversores que invirtieron en empresas en Argentina
+
+inversores_a_argentina <- read_excel(path = "bases/VC_y_otros_a_argentina_corregido.xlsx",
+                                     sheet = "final")
+
+# En los nombres de las columnas, reemplazo los espacios con "_" y todos los nombres pasan a minúscula
+
+inversores_a_argentina <- inversores_a_argentina |> 
+  rename_with(~ gsub(" ", "_", .x)) |> 
+  rename_with(tolower)
+
+```
+
+```{r dragon_capital_VC}
+
+# Hay dos instituciones que se llaman "Dragon Capital", que son de distintos lugares. Les ponemos nombres distintos para distinguirlas
+inversores_a_argentina <- inversores_a_argentina |> 
+  mutate(`organization/person_name` = case_when(
+    `organization/person_name` == "Dragon Capital" & location == "Kyiv, Kyyiv, Ukraine"
+    ~ "Dragon Capital-UKR",
+    `organization/person_name` == "Dragon Capital" & location == "San Francisco, California, United States"
+    ~ "Dragon Capital-USA",
+    TRUE ~ `organization/person_name`))
+
+```
+
+
+# Filtrados entre bases
+
+A partir de los datos de *inversores*, eliminamos algunas **inversiones** que no eran pertinentes. Básicamente, excluimos a los inversores individuales/ ángeles; y a aquellos que invirtieron en una SU extranjera junto con algún Argentino, pero nunca invirtieron en una SU argentina.
+
+
+```{r listados_inversores}
+
+# Arma el listado de personas_inversoras (están catalogades como inversores ángel)
+personas_a_argentina <- inversores_a_argentina |> 
   filter(investor_type %in% c("Individual/Angel", "Individual/Angel, Investment Partner")) |> 
   pull(`organization/person_name`)
 
-list_inversores_a_argentina <- inversores_a_argentina |> 
+# Arma el listado de las instituciones que sabemos que invirtieron en Argentina (así después eliminamos a las random que aparezcan)
+VC_a_argentina <- inversores_a_argentina |> 
   pull(`organization/person_name`)
-
+  
 ```
 
 
@@ -158,18 +202,19 @@ list_inversores_a_argentina <- inversores_a_argentina |>
 
 # Excluímos a las personas inversoras del listado
 inversiones_argentina <- inversiones_argentina |> 
-  filter(!investor %in% list_personas_inversoras)
+  filter(!investor %in% personas_a_argentina)
 
 # Incluimos sólo a inversores institucionales que están incluidos en el listado de inversores a Argentina
 inversiones_argentina <- inversiones_argentina |> 
-  filter(investor %in% list_inversores_a_argentina)
+  filter(investor %in% VC_a_argentina)
 
 # Elimino los objetos que ya no necesito
-rm(list_personas_inversoras, list_inversores_a_argentina)
+rm(personas_a_argentina, VC_a_argentina)
 
 ```
 
 
+# Armado de matriz
 
 ```{r matriz_de_inversores}
 
@@ -246,6 +291,32 @@ adjacency_inversores <- network(adjacency_inversores)
 
 # Armado de la red (desde edgelist)
 
+## Armamos la tabla de atributos
+
+```{r}
+
+VC_en_Argentina <- inversores_a_argentina |> 
+  filter(str_detect(location, "Argentina") &
+           !str_detect(location, "Costa Rica") &
+           !str_detect(location, "Mexico") &
+           !str_detect(location, "Brazil")) |> 
+  #count(location) |> 
+  pull(`organization/person_name`)
+
+inversores_a_argentina_atributos <- inversores_a_argentina |> 
+  mutate("argentina_local" =
+           ifelse((inversores_a_argentina$`organization/person_name` %in% VC_en_Argentina),
+                  T,
+                  F)) |> 
+  select(`organization/person_name`, argentina_local)
+
+VC_colores <- if_else(inversores_a_argentina$argentina_local, "blue", "red")
+
+
+```
+
+## Armamos la red
+
 ```{r red_desde_edgelist}
 
 # Seleccionamos sólo algunos de los vínculos
@@ -255,7 +326,8 @@ edgelist_inversores_corto <- edgelist_inversores |>
 
 # Creamos el objeto network, a partir de la edgelist
 edgelist_inversores_corto <- network(edgelist_inversores_corto,
-                                     matrix.type = "edgelist")
+                                     matrix.type = "edgelist",
+                                     vertices = inversores_a_argentina_atributos)
 
 #summary(edgelist_inversores_corto)
 ```
@@ -263,7 +335,7 @@ edgelist_inversores_corto <- network(edgelist_inversores_corto,
 ```{r red_graficada}
 
 # ¿Saldrá una red de esto?
-plot(edgelist_inversores_corto,
+gplot(edgelist_inversores_corto,
      # Muestra etiquetas
      displaylabels = F,
      # No muestra flechas
@@ -272,6 +344,10 @@ plot(edgelist_inversores_corto,
      jitter = F,
      # Dice que es interactivo pero no estaría cambiando nada
      #interactive = F,
+     #mode = "target"
+     vertex.col = TRUE,
+     # ¿Deberían mostrarse los vértices aislados?
+     displayisolates = FALSE,
      # Impide cajas en las etiquetas
      boxed.labels = F,
      # Agranda el tamaño de los círculos
