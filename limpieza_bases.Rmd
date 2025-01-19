@@ -266,6 +266,7 @@ edgelist_inversores <- edgelist_inversores |>
 
 ```
 
+
 Estos dos chunks por ahora no se usan. Se anulan por ahora
 
 ```{r adjacency_inversores, eval=FALSE, include=FALSE}
@@ -291,70 +292,130 @@ adjacency_inversores <- network(adjacency_inversores)
 
 # Armado de la red (desde edgelist)
 
-## Armamos la tabla de atributos
+## Definimos parámetros antes
 
-```{r}
+```{r define_argentinidad}
 
-VC_en_Argentina <- inversores_a_argentina |> 
-  filter(str_detect(location, "Argentina") &
-           !str_detect(location, "Costa Rica") &
-           !str_detect(location, "Mexico") &
-           !str_detect(location, "Brazil")) |> 
-  #count(location) |> 
-  pull(`organization/person_name`)
+# Revisa que sea de Argentina y no de otros países
+inversores_a_argentina <- inversores_a_argentina |> 
+  mutate(argentina_local = ifelse(str_detect(location, "Argentina") &
+                                    !str_detect(location, "Costa Rica") &
+                                    !str_detect(location, "Mexico") &
+                                    !str_detect(location, "Brazil"),
+                                  TRUE,
+                                  FALSE))
 
+# Guardamos la tabla de atributos a asignar a los vértices
 inversores_a_argentina_atributos <- inversores_a_argentina |> 
-  mutate("argentina_local" =
-           ifelse((inversores_a_argentina$`organization/person_name` %in% VC_en_Argentina),
-                  T,
-                  F)) |> 
   select(`organization/person_name`, argentina_local)
 
-VC_colores <- if_else(inversores_a_argentina$argentina_local, "blue", "red")
+```
 
+
+Define el umbral a partir del cual se incluyen casos
+
+```{r umbral_filtrado}
+
+# Establece un umbral que usamos para definir cuántos enlaces minimos van a tener los vértices de la red que vamos a armar
+umbral_pocos <- 3
+
+
+# Seleccionamos sólo algunos de los vínculos
+edgelist_inversores_pocos <- edgelist_inversores |> 
+  arrange(desc(new_SU_en_comun)) |> 
+  filter(new_SU_en_comun >= umbral_pocos)
+
+# Define cuáles son los pocos inversores incluidos
+pocos_inversores <- edgelist_inversores_pocos |> 
+  pull(new_inversor_1)
+
+# Nos quedamos con los pocos inversores de los cuales vamos a sacar atributos
+inversores_a_argentina_atributos_2 <- inversores_a_argentina_atributos |> 
+  filter(`organization/person_name` %in% pocos_inversores) |> 
+  # Define un orden específico, que es el que hereda el objeto network después
+  arrange(`organization/person_name`)
+
+rm(umbral_pocos, pocos_inversores)
 
 ```
+
+
+```{r listas_parametros}
+
+# Define los colores que van a tener los vertices
+colores_vertices <- if_else(inversores_a_argentina_atributos_2$argentina_local,
+                            "#F6B40E",
+                            "red3")
+
+# Define los colores que van a tener las etiquetas
+colores_etiquetas <- if_else(inversores_a_argentina_atributos_2$argentina_local,
+                             "#74ACDF",
+                             "red3")
+
+etiquetas <- if_else(inversores_a_argentina_atributos_2$argentina_local,
+                     inversores_a_argentina_atributos_2$`organization/person_name`,
+                     NA)
+
+```
+
 
 ## Armamos la red
 
 ```{r red_desde_edgelist}
 
-# Seleccionamos sólo algunos de los vínculos
-edgelist_inversores_corto <- edgelist_inversores |> 
-  arrange(desc(new_SU_en_comun)) |> 
-  filter(new_SU_en_comun >= 3)
-
 # Creamos el objeto network, a partir de la edgelist
-edgelist_inversores_corto <- network(edgelist_inversores_corto,
+edgelist_inversores_pocos <- network(edgelist_inversores_pocos,
                                      matrix.type = "edgelist",
-                                     vertices = inversores_a_argentina_atributos)
+                                     vertices = inversores_a_argentina_atributos_2)
 
-#summary(edgelist_inversores_corto)
+#summary(edgelist_inversores_pocos)
+
 ```
+
 
 ```{r red_graficada}
 
 # ¿Saldrá una red de esto?
-gplot(edgelist_inversores_corto,
-     # Muestra etiquetas
-     displaylabels = F,
-     # No muestra flechas
-     usearrows = F,
-     # Impide que se superpongan los nombres
-     jitter = F,
-     # Dice que es interactivo pero no estaría cambiando nada
-     #interactive = F,
-     #mode = "target"
-     vertex.col = TRUE,
-     # ¿Deberían mostrarse los vértices aislados?
-     displayisolates = FALSE,
-     # Impide cajas en las etiquetas
-     boxed.labels = F,
-     # Agranda el tamaño de los círculos
-     vertex.cex = 0.8,
-     edge.lwd = ((as.numeric(edgelist_inversores_corto%e%"new_SU_en_comun"))^1.8)/2)
+gplot(edgelist_inversores_pocos,
+      # Tipo de gráfico (simple)
+      gmode = "graph",
+      # Define qué etiquetas se usan
+      label = etiquetas,
+      # Define si se usan flechas para los enlaces
+      usearrows = FALSE,
+      # Tipo de gráfico (complejo)
+      #mode = "target",
+      
+      # ¿Deberían mostrarse los vértices aislados?
+      displayisolates = FALSE,
+      # Dice que es interactivo pero no estaría cambiando nada
+      #interactive = F,
+      
+      # Sirve para zoomear
+      pad = 0,
+      
+      # Define si se usan etiquetas
+      displaylabels = TRUE,
+      # Define si tienen cajas las etiquetas
+      boxed.labels = FALSE,
+      # Define posiciones del 1 al 5 de las etiquetas
+      label.pos = 5,
+      # Define el tamaño de las etiquetas
+      label.cex = 0.75,
+      # Define el tamaño de los vértices
+      vertex.cex = as.numeric(edgelist_inversores_pocos%e%"new_SU_en_comun")/5,
+      # Define los colores de las etiquetas
+      label.col = colores_etiquetas,
+      # Define los colores de los vértices
+      vertex.col = colores_vertices,
+      # Define los colores de los bordes de los vértices
+      vertex.border = colores_vertices,
+      # Define el tamaño de los enlaces
+      edge.lwd = (((as.numeric(edgelist_inversores_pocos%e%"new_SU_en_comun"))^1.8)/2),
+      # Define si los enlaces son curvos
+      edge.curve = FALSE)
 
-# Esto es lo que busqué para encontrar cómo se definen los parámetros de la función esta
+# Para los parámetros del paquete network, para la función plot()
 #methods(plot) ---- plot.network.default()
 
 ```
